@@ -110,19 +110,21 @@ main(int argc, char *argv[])
 	#endif
 	if (slist_length(file_info.good_files) > 0) {
 		file_info.hash_trie = trie_new();
-		/* FIXME there needs to be a trie for shash AND hash */
-		file_info.hash_filter = create_filter(slist_length(file_info.good_files));
+		file_info.shash_trie = trie_new();
+		/* FIXME is this ^ really necessary, two swipes? */
+		file_info.shash_filter = create_filter(slist_length(file_info.good_files));
 		/* Extract each file from the list (they should all be regular) */
 		slist_iterate(&file_info.good_files, &list_iterator);
 		while (slist_iter_has_more(&list_iterator)) {
 			file_entry = slist_iter_next(&list_iterator);
 			assert(file_entry->type == REGULAR);
+			/* Perform a "shallow" hash of the file */
 			hash_value = hash_entry(file_entry, SHALLOW);
 			#ifndef NDEBUG
 			printf("[-HASH] %s\t*%s\n", file_entry->path, hash_value);
 			#endif
 			/* Check to see if we might have seen this file before */
-			if (bloom_filter_query(file_info.hash_filter, hash_value)) {
+			if (bloom_filter_query(file_info.shash_filter, hash_value)) {
 				hash_value = hash_entry(file_entry, FULL);
 				#ifndef NDEBUG
 				printf("[+HASH] %s\t*%s\n", file_entry->path, hash_value);
@@ -135,7 +137,8 @@ main(int argc, char *argv[])
 					trie_insert(file_info.hash_trie, hash_value, file_entry);
 				}
 			} else {
-				bloom_filter_insert(file_info.hash_filter, hash_value);
+				/* Add a record of this shash to the filter */
+				bloom_filter_insert(file_info.shash_filter, hash_value);
 			}
 		}
 	}

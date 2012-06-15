@@ -16,7 +16,8 @@ struct file_info_t
 	/* Store which files we will index */
 	SListEntry *file_stack, *bad_files, *good_files;
 	/* Store an index of the hashes */
-	Trie *hash_trie; BloomFilter *hash_filter;
+	Trie *hash_trie, *shash_trie;
+	BloomFilter *shash_filter;
 	/* Store statistical metadata */
 	size_t total_files, invalid_files, protected_files, irregular_files;
 };
@@ -78,8 +79,9 @@ clear_info(struct file_info_t *file_info)
 		file_info->file_stack =
 		file_info->bad_files =
 		file_info->good_files = NULL;
-		file_info->hash_trie = NULL;
-		file_info->hash_filter = NULL;
+		file_info->hash_trie =
+		file_info->shash_trie = NULL;
+		file_info->shash_filter = NULL;
 		file_info->total_files =
 		file_info->invalid_files =
 		file_info->protected_files =
@@ -110,8 +112,11 @@ destroy_info(struct file_info_t *file_info)
 		if (file_info->hash_trie) {
 			trie_free(file_info->hash_trie);
 		}
-		if (file_info->hash_filter) {
-			bloom_filter_free(file_info->hash_filter);
+		if (file_info->shash_trie) {
+			trie_free(file_info->shash_trie);
+		}
+		if (file_info->shash_filter) {
+			bloom_filter_free(file_info->shash_filter);
 		}
 		/* Purge file data */
 		clear_list(file_info->file_stack);
