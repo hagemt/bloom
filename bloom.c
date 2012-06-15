@@ -17,11 +17,12 @@ int
 main(int argc, char *argv[])
 {
 	/* For traversing lists and directories */
-	struct file_entry_t *file_entry;
 	SListIterator list_iterator;
 	DIR *directory;
+	/* For dealing with entries */
 	size_t path_len;
-	char buffer[PATH_MAX_LEN];
+	char path_buffer[PATH_MAX_LEN], *hash_value;
+	struct file_entry_t *file_entry, *trie_entry;
 	/* Session data */
 	struct file_info_t file_info;
 	clear_info(&file_info);
@@ -38,7 +39,7 @@ main(int argc, char *argv[])
 
 	/* Step 2: Fully explore any directories specified */
 	#ifndef NDEBUG
-	fprintf(stderr, "[DEBUG] Creating file list... ");
+	printf("[DEBUG] Creating file list...\n");
 	#endif
 	while (slist_length(file_info.file_stack) > 0) {
 		/* Pick off the top of the file stack */
@@ -46,36 +47,33 @@ main(int argc, char *argv[])
 		slist_remove_entry(&file_info.file_stack, file_info.file_stack);
 		assert(file_entry->type == DIRECTORY);
 		/* Copy the basename to a buffer */
-		memset(buffer, '\0', PATH_MAX_LEN);
+		memset(path_buffer, '\0', PATH_MAX_LEN);
 		path_len = strnlen(file_entry->path, PATH_MAX_LEN);
-		memcpy(buffer, file_entry->path, path_len);
+		memcpy(path_buffer, file_entry->path, path_len);
 		/* Ignore cases that would cause overflow */
 		if (path_len < PATH_MAX_LEN) {
 			/* Append a trailing slash */
-			buffer[path_len] = '/';
-			/* Record all contents (this may push onto file_stack or one of the lists) */
+			path_buffer[path_len] = '/';
+			/* Record all contents (may push onto file stack or one of the lists) */
 			directory = opendir(file_entry->path);
-			if (traverse(&file_info, directory, buffer, ++path_len)) {
+			if (traverse(&file_info, directory, path_buffer, ++path_len)) {
 				fprintf(stderr, "[FATAL] out of memory\n");
 				destroy_info(&file_info);
 				return (EXIT_FAILURE);
 			} else if (closedir(directory)) {
-				fprintf(stderr, "[WARNING] '%s' (closedir)\n", file_entry->path);
+				fprintf(stderr, "[WARNING] '%s' (close failed)\n", file_entry->path);
 			}
 		}
 		/* Discard this entry */
 		destroy_entry(file_entry);
 		free(file_entry);
 	}
-	#ifndef NDEBUG
-	fprintf(stderr, "done\n");
-	#endif
 
 	/* Step 3: Warn about any ignored files */
 	if (slist_length(file_info.bad_files) > 0) {
 		slist_iterate(&file_info.bad_files, &list_iterator);
 		while (slist_iter_has_more(&list_iterator)) {
-			file_entry = (struct file_entry_t *)(slist_iter_next(&list_iterator));
+			file_entry = slist_iter_next(&list_iterator);
 			fprintf(stderr, "[WARNING] '%s' ", file_entry->path);
 			switch (file_entry->type) {
 			case INVALID:
@@ -92,10 +90,10 @@ main(int argc, char *argv[])
 				break;
 			}
 		}
-		fprintf(stderr, "[WARNING] files that could not be handled were ignored\n");
+		fprintf(stderr, "[WARNING] %lu file(s) ignored\n",
+			(long unsigned)(num_errors(&file_info)));
 	}
 	#ifndef NDEBUG
-	/* Abort if necessary */
 	if (num_errors(&file_info) > 0) {
 		fprintf(stderr, "[FATAL] cannot parse entire file tree\n");
 		destroy_info(&file_info);
@@ -108,27 +106,38 @@ main(int argc, char *argv[])
 
 	/* Step 4: Begin the filtering process */
 	#ifndef NDEBUG
-	fprintf(stderr, "[DEBUG] Creating file table... ");
+	printf("[DEBUG] Creating file table...\n");
 	#endif
 	if (slist_length(file_info.good_files) > 0) {
-		file_info.hash_trie = trie_new();
+		/* FIXME there needs to be a trie for shash AND hash */
 		file_info.hash_filter = create_filter(slist_length(file_info.good_files));
 		/* Extract each file from the list (they should all be regular) */
 		slist_iterate(&file_info.good_files, &list_iterator);
 		while (slist_iter_has_more(&list_iterator)) {
-			file_entry = (struct file_entry_t *)(slist_iter_next(&list_iterator));
-			assert(file_entry->type == NORMAL);
-			/* Generate a hash and record it to the trie and filter */
-			trie_insert(file_info.hash_trie, shash(file_entry), file_entry->path);
-			bloom_filter_insert(file_info.hash_filter, shash(file_entry));
-			#ifdef NDEBUG
-			fprintf(stderr, "%s\t*%s\n", shash(file_entry), file_entry->path);
+			file_entry = slist_iter_next(&list_iterator);
+			assert(file_entry->type == REGULAR);
+			hash_value = hash_entry(file_entry, SHALLOW);
+			#ifndef NDEBUG
+			printf("[-HASH] %s\t*%s\n", file_entry->path, hash_value);
 			#endif
+			/* Check to see if we might have seen this file before */
+			if (bloom_filter_query(file_info.hash_filter, hash_value)) {
+				hash_value = hash_entry(file_entry, FULL);
+				#ifndef NDEBUG
+				printf("[+HASH] %s\t*%s\n", file_entry->path, hash_value);
+				#endif
+				trie_entry = trie_lookup(file_info.hash_trie, hash_value);
+				if (trie_entry != TRIE_NULL) {
+					/* TODO handle collision with a list */
+					printf("%s == %s\n", trie_entry->path, file_entry->path);
+				} else {
+					trie_insert(file_info.hash_trie, hash_value, file_entry);
+				}
+			} else {
+				bloom_filter_insert(file_info.hash_filter, hash_value);
+			}
 		}
 	}
-	#ifndef NDEBUG
-	fprintf(stderr, "done\n");
-	#endif
 
 	/* Step 5: Cleanup structures before exit */
 	destroy_info(&file_info);
