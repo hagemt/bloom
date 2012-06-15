@@ -50,7 +50,7 @@ hash_entry(struct file_entry_t *file_entry, enum hash_depth_t depth)
 			}
 			MD5(file_buffer, MD5_DIGEST_LENGTH, hash_buffer);
 			free(file_buffer);
-			hash_storage = file_entry->shash = malloc(2 * MD5_DIGEST_LENGTH);
+			hash_storage = file_entry->shash = malloc(2 * MD5_DIGEST_LENGTH + 1);
 			break;
 
 		/* A full hash is computed for the entire file */
@@ -71,7 +71,7 @@ hash_entry(struct file_entry_t *file_entry, enum hash_depth_t depth)
 				fprintf(stderr, "[WARNING] '%s' (unmap failed)\n", file_entry->path);
 				#endif
 			}
-			hash_storage = file_entry->hash = malloc(2 * MD5_DIGEST_LENGTH);
+			hash_storage = file_entry->hash = malloc(2 * MD5_DIGEST_LENGTH + 1);
 			break;
 
 		default:
