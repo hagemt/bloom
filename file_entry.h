@@ -5,35 +5,17 @@
 #include <unistd.h>
 
 #define PATH_MAX_LEN 0x7FF7
+#define DEFAULT_SIZE (off_t)(-1)
 
 /* Indicate a file's status */
 enum file_entry_type_t
 {
 	INVALID      = 0x0,
 	INACCESSIBLE = 0x1,
-	NORMAL       = 0x2,
+	REGULAR      = 0x2,
 	DIRECTORY    = 0x4,
 	OTHER        = 0x8
 };
-
-inline enum file_entry_type_t
-entry_type(const char * path)
-{
-	struct stat buffer;
-	if (lstat(path, &buffer)) {
-		return INVALID;
-	}
-	if (access(path, R_OK)) {
-		return INACCESSIBLE;
-	}
-	if (S_ISREG(buffer.st_mode)) {
-		return NORMAL;
-	}
-	if (S_ISDIR(buffer.st_mode)) {
-		return DIRECTORY;	
-	}
-	return OTHER;
-}
 
 /* A file entry consists of a path, a hash of the file
  * (potentially a full or short hash) and its type */
@@ -41,22 +23,40 @@ struct file_entry_t
 {
 	char *path, *hash, *shash;
 	enum file_entry_type_t type;
+	off_t size;
 };
 
 inline enum file_entry_type_t
-entry(const char *path, struct file_entry_t *file_entry)
+stat_entry(const char *path, struct file_entry_t *file_entry)
 {
 	size_t path_len;
+	struct stat status;
+	enum file_entry_type_t type;
 	/* stat the file at this path */
-	enum file_entry_type_t type = entry_type(path);
-	if (path && file_entry) {
-		file_entry->type = type;
+	if (!path || lstat(path, &status)) {
+		type = INVALID;
+	} else if (access(path, R_OK)) {
+		type = INACCESSIBLE;
+	} else if (S_ISREG(status.st_mode)) {
+		type = REGULAR;
+	} else if (S_ISDIR(status.st_mode)) {
+		type = DIRECTORY;
+	} else {
+		type = OTHER;
+	}
+	/* If appropriate, fill in the entry */
+	if (file_entry) {
+		memset(file_entry, 0, sizeof(struct file_entry_t));
 		file_entry->hash = file_entry->shash = NULL;
-		/* Assure ourselves that path is terminal */
-		path_len = strnlen(path, PATH_MAX_LEN) + 1;
-		file_entry->path = malloc(path_len * sizeof(char));
-		memset(file_entry->path, '\0', path_len);
-		memcpy(file_entry->path, path, path_len);
+		file_entry->size = (type == REGULAR) ? status.st_size : (DEFAULT_SIZE);
+		file_entry->type = type;
+		if (path) {
+			/* Assure ourselves that the path is terminal */
+			path_len = strnlen(path, PATH_MAX_LEN) + 1;
+			file_entry->path = malloc(path_len * sizeof(char));
+			memset(file_entry->path, '\0', path_len * sizeof(char));
+			memcpy(file_entry->path, path, path_len * sizeof(char));
+		}
 	}
 	return type;
 }

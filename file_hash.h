@@ -1,27 +1,102 @@
 #ifndef FILE_HASH_H
 #define FILE_HASH_H
+#include <fcntl.h>
+#include <sys/mman.h>
+
+#include <openssl/md5.h>
 
 #include "file_entry.h"
 #include "file_info.h"
 
-#define DIGEST_LENGTH  42
+enum hash_depth_t {
+	NONE    = 0x0,
+	SHALLOW = 0x1,
+	FULL    = 0x2
+};
 
-inline char *
-shash(struct file_entry_t *file_entry) {
-	char *begin, *end;
-	if (!file_entry) {
+char *
+hash_entry(struct file_entry_t *file_entry, enum hash_depth_t depth)
+{
+	unsigned char hash_buffer[MD5_DIGEST_LENGTH], *file_buffer;
+	int fd; off_t pivot; char *hash_storage = NULL;
+	if (!file_entry || (fd = open(file_entry->path, O_RDONLY)) < 0) {
+		#ifndef NDEBUG
+		fprintf(stderr, "[ERROR] '%s' (open failed)\n", file_entry->path);
+		#endif
 		return NULL;
 	}
-	if (!file_entry->shash) {
-		/* TODO do actual hashing */
-		begin = file_entry->shash = malloc(DIGEST_LENGTH + 1);
-		end = file_entry->shash + DIGEST_LENGTH;
-		while (begin < end) {
-			snprintf(begin, 3, "%02x", rand() % 0xFF);
-			++begin; ++begin;
-		}
+
+	switch (depth) {
+		/* A shallow hash reads only the first part of the file */
+		case SHALLOW:
+			/* Entries should not be hashed twice */
+			if (file_entry->shash) { break; }
+			/* Read a small part of the file and compute the hash of that */
+			file_buffer = malloc(MD5_DIGEST_LENGTH);
+			if (!file_buffer) {
+				#ifndef NDEBUG
+				fprintf(stderr, "[ERROR] '%s' (buffer failed)\n", file_entry->path);
+				#endif
+				break;
+			}
+			memset(file_buffer, 0, MD5_DIGEST_LENGTH);
+			pivot = (file_entry->size < MD5_DIGEST_LENGTH) ?
+				file_entry->size : MD5_DIGEST_LENGTH;
+			if (read(fd, file_buffer, MD5_DIGEST_LENGTH) < pivot) {
+				#ifndef NDEBUG
+				fprintf(stderr, "[ERROR] '%s' (read failed)\n", file_entry->path);
+				#endif
+				break;
+			}
+			MD5(file_buffer, MD5_DIGEST_LENGTH, hash_buffer);
+			free(file_buffer);
+			hash_storage = file_entry->shash = malloc(2 * MD5_DIGEST_LENGTH);
+			break;
+
+		/* A full hash is computed for the entire file */
+		case FULL:
+			/* Entries should not be hashed twice */
+			if (file_entry->hash) { break; }
+			/* FIXME make it only mmap files of appropriate size */
+			file_buffer = mmap(NULL, file_entry->size, PROT_READ, MAP_SHARED, fd, 0);
+			if (file_buffer == (MAP_FAILED)) {
+				#ifndef NDEBUG
+				fprintf(stderr, "[ERROR] '%s' (map failed)\n", file_entry->path);
+				#endif
+				break;
+			}
+			MD5(file_buffer, file_entry->size, hash_buffer);
+			if (munmap(file_buffer, file_entry->size)) {
+				#ifndef NDEBUG
+				fprintf(stderr, "[WARNING] '%s' (unmap failed)\n", file_entry->path);
+				#endif
+			}
+			hash_storage = file_entry->hash = malloc(2 * MD5_DIGEST_LENGTH);
+			break;
+
+		default:
+			#ifndef NDEBUG
+			fprintf(stderr, "[WARNING] '%X' (unknown depth)\n", depth);
+			#endif
+			break;
 	}
-	return file_entry->shash;
+
+	/* Close the file */
+	if (close(fd)) {
+	#ifndef NDEBUG
+		fprintf(stderr, "[WARNING] '%s' (close failed)\n", file_entry->path);
+	#endif
+	}
+
+	/* Convert the hash to ASCII */
+	if (hash_storage) {
+		for (pivot = 0; pivot < MD5_DIGEST_LENGTH; ++pivot) {
+			snprintf(hash_storage, 3, "%02x", hash_buffer[pivot]);
+			++hash_storage; ++hash_storage;
+		}
+		return (depth == FULL) ? file_entry->hash : file_entry->shash;
+	}
+	return NULL;
 }
 
 inline DIR *

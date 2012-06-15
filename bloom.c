@@ -109,6 +109,7 @@ main(int argc, char *argv[])
 	printf("[DEBUG] Creating file table...\n");
 	#endif
 	if (slist_length(file_info.good_files) > 0) {
+		file_info.hash_trie = trie_new();
 		/* FIXME there needs to be a trie for shash AND hash */
 		file_info.hash_filter = create_filter(slist_length(file_info.good_files));
 		/* Extract each file from the list (they should all be regular) */

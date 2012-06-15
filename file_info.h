@@ -21,7 +21,7 @@ struct file_info_t
 	size_t total_files, invalid_files, protected_files, irregular_files;
 };
 
-/* Returns an entry */
+/* Returns an entry if the path could be recorded */
 inline struct file_entry_t *
 record(const char *file_path, struct file_info_t *file_info)
 {
@@ -33,13 +33,13 @@ record(const char *file_path, struct file_info_t *file_info)
 		/* Catch any storage issues at this stage */
 		if (file_entry) {
 			/* Check that this path is valid (fill the entry) */
-			entry(file_path, file_entry);
+			stat_entry(file_path, file_entry);
 			switch (file_entry->type) {
 			case DIRECTORY:
 				/* Directories go on the stack instead */
 				slist_prepend(&file_info->file_stack, file_entry);
 				break;
-			case NORMAL:
+			case REGULAR:
 				/* Count these files as valid */
 				++file_info->total_files;
 				slist_prepend(&file_info->good_files, file_entry);
@@ -56,15 +56,15 @@ record(const char *file_path, struct file_info_t *file_info)
 
 /* Utilities */
 
-#define NEG_LOG2_PR_FP 7.0f
-#define LN2            0.7f
+#define FP 0.01
+#define LN2 0.7
 
 /* Create optimal bloom-filter for n elements */
 inline BloomFilter *
 create_filter(size_t n)
 {
 	/* size of the filter depends on n and Pr[false-positive] */
-	size_t m = ceil(n / LN2 * NEG_LOG2_PR_FP);
+	size_t m = ceil(n / LN2 * -log2(FP));
 	/* number of hash functions to minimize false-positives */
 	size_t k = ceil(LN2 * m / n);
 	/* ignore all case, since we are storing hashes */
