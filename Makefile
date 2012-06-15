@@ -1,12 +1,11 @@
 CC = gcc
-CFLAGS = -c -Wall -Wextra
+CFLAGS = -c -Wall -Wextra -D_FILE_OFFSET_BITS=64
 DFLAGS = -g -O0 -pedantic
-IFLAGS = -b -s -v 
-LFLAGS = -lm -lcalg
-PFLAGS = -pg
+IFLAGS = -b -s -v
+LFLAGS = -lm -lcalg -lssl
+PFLAGS = -g -p -pg
 RFLAGS = -DNDEBUG -O3
 WFLAGS = -Wall -Wextra -pedantic
-.PHONY: all clean install uninstall debug profile release
 
 all : debug release
 
@@ -45,3 +44,5 @@ clean:
 	$(RM) bloom_release
 	$(RM) bloom_release.o
 	$(RM) gmon.out
+
+.PHONY: all debug profile release install uninstall clean
