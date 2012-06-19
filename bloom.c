@@ -5,25 +5,41 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <libcalg-1.0/libcalg/slist.h>
 #include <libcalg-1.0/libcalg/bloom-filter.h>
+#include <libcalg-1.0/libcalg/hash-pointer.h>
+#include <libcalg-1.0/libcalg/compare-pointer.h>
+#include <libcalg-1.0/libcalg/set.h>
+#include <libcalg-1.0/libcalg/slist.h>
 #include <libcalg-1.0/libcalg/trie.h>
 
 #include "file_entry.h"
 #include "file_info.h"
 #include "file_hash.h"
 
+void archive(struct file_info_t *info, struct file_entry_t *entry) {
+	Set *hash_set = trie_lookup(info->hash_trie, entry->hash);
+	if (hash_set != TRIE_NULL) {
+		set_insert(hash_set, entry);
+		return;
+	}
+	/* Otherwise, the value needs a new list */
+	hash_set = set_new(&pointer_hash, &pointer_equal);
+	slist_prepend(&info->duplicates, hash_set);
+	trie_insert(info->hash_trie, entry->hash, hash_set);
+}
+
 int
 main(int argc, char *argv[])
 {
-	/* For traversing lists and directories */
-	SListIterator list_iterator;
+	/* For traversing structures */
 	DIR *directory;
-	/* For dealing with entries */
 	size_t path_len;
 	char path_buffer[PATH_MAX_LEN], *hash_value;
 	struct file_entry_t *file_entry, *trie_entry;
-	/* Session data */
+	SListIterator slist_iterator;
+	SetIterator set_iterator;
+
+	/* Step 0: Session data */
 	struct file_info_t file_info;
 	clear_info(&file_info);
 
@@ -66,14 +82,13 @@ main(int argc, char *argv[])
 		}
 		/* Discard this entry */
 		destroy_entry(file_entry);
-		free(file_entry);
 	}
 
 	/* Step 3: Warn about any ignored files */
 	if (slist_length(file_info.bad_files) > 0) {
-		slist_iterate(&file_info.bad_files, &list_iterator);
-		while (slist_iter_has_more(&list_iterator)) {
-			file_entry = slist_iter_next(&list_iterator);
+		slist_iterate(&file_info.bad_files, &slist_iterator);
+		while (slist_iter_has_more(&slist_iterator)) {
+			file_entry = slist_iter_next(&slist_iterator);
 			fprintf(stderr, "[WARNING] '%s' ", file_entry->path);
 			switch (file_entry->type) {
 			case INVALID:
@@ -114,36 +129,58 @@ main(int argc, char *argv[])
 		/* FIXME is this ^ really necessary, two swipes? */
 		file_info.shash_filter = create_filter(slist_length(file_info.good_files));
 		/* Extract each file from the list (they should all be regular) */
-		slist_iterate(&file_info.good_files, &list_iterator);
-		while (slist_iter_has_more(&list_iterator)) {
-			file_entry = slist_iter_next(&list_iterator);
+		slist_iterate(&file_info.good_files, &slist_iterator);
+		while (slist_iter_has_more(&slist_iterator)) {
+			file_entry = slist_iter_next(&slist_iterator);
 			assert(file_entry->type == REGULAR);
 			/* Perform a "shallow" hash of the file */
 			hash_value = hash_entry(file_entry, SHALLOW);
 			#ifndef NDEBUG
-			printf("[-HASH] %s\t*%s\n", file_entry->path, hash_value);
+			printf("[SHASH] %s\t*%s\n", file_entry->path, hash_value);
 			#endif
 			/* Check to see if we might have seen this file before */
 			if (bloom_filter_query(file_info.shash_filter, hash_value)) {
+				/* Get the full hash of the new file */
 				hash_value = hash_entry(file_entry, FULL);
 				#ifndef NDEBUG
 				printf("[+HASH] %s\t*%s\n", file_entry->path, hash_value);
 				#endif
-				trie_entry = trie_lookup(file_info.hash_trie, hash_value);
-				if (trie_entry != TRIE_NULL) {
-					/* TODO handle collision with a list */
-					printf("%s == %s\n", trie_entry->path, file_entry->path);
-				} else {
-					trie_insert(file_info.hash_trie, hash_value, file_entry);
+				archive(&file_info, file_entry);
+				/* Check to see if bloom failed us */
+				trie_entry = trie_lookup(file_info.shash_trie, file_entry->shash);
+				if (trie_entry == TRIE_NULL) {
+					#ifndef NDEBUG
+					printf("[DEBUG] '%s' (false positive)\n", file_entry->path);
+					#endif
+					trie_insert(file_info.shash_trie, file_entry->shash, file_entry);
 				}
+				/* Get the full hash of the old file */
+				hash_value = hash_entry(trie_entry, FULL);
+				#ifndef NDEBUG
+				if (hash_value) {
+					printf("[-HASH] %s\t*%s\n", trie_entry->path, hash_value);
+				}
+				#endif
+				archive(&file_info, trie_entry);
 			} else {
 				/* Add a record of this shash to the filter */
 				bloom_filter_insert(file_info.shash_filter, hash_value);
+				trie_insert(file_info.shash_trie, hash_value, file_entry);
 			}
 		}
 	}
 
-	/* Step 5: Cleanup structures before exit */
+	/* Step 5: Output results and cleanup before exit */
+	slist_iterate(&file_info.duplicates, &slist_iterator);
+	while (slist_iter_has_more(&slist_iterator)) {
+		set_iterate(slist_iter_next(&slist_iterator), &set_iterator);
+		while (set_iter_has_more(&set_iterator)) {
+			file_entry = set_iter_next(&set_iterator);
+			#ifndef NDEBUG
+			printf("[EXTRA] %s\t*%s\n", file_entry->path, file_entry->hash);
+			#endif
+		}
+	}
 	destroy_info(&file_info);
 	return (EXIT_SUCCESS);
 }

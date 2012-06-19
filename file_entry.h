@@ -73,6 +73,7 @@ destroy_entry(struct file_entry_t *file_entry)
 			free(file_entry->shash);
 		}
 		free(file_entry->path);
+		free(file_entry);
 	}
 }
 

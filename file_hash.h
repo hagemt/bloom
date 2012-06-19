@@ -99,7 +99,7 @@ hash_entry(struct file_entry_t *file_entry, enum hash_depth_t depth)
 	return NULL;
 }
 
-inline DIR *
+DIR *
 traverse(struct file_info_t *file_info, DIR *directory, char *buffer, size_t offset) 
 {
 	size_t d_name_len;
