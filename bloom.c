@@ -183,9 +183,9 @@ main(int argc, char *argv[])
 		total_wasted += bytes_wasted)
 	{
 		Set *set = slist_iter_next(&slist_iterator);
-		set_iterate(set, &set_iterator);
-		printf("[EXTRA] '%lu' files (w/ same hash):\n",
+		printf("[EXTRA] %lu files (w/ same hash):\n",
 			(unsigned long)(set_num_entries(set)));
+		set_iterate(set, &set_iterator);
 		for (bytes_wasted = 0;
 			set_iter_has_more(&set_iterator);
 			bytes_wasted += file_entry->size,
