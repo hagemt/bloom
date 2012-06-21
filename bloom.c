@@ -18,24 +18,27 @@
 
 void archive(struct file_info_t *info, struct file_entry_t *entry) {
 	Set *hash_set = trie_lookup(info->hash_trie, entry->hash);
-	if (hash_set != TRIE_NULL) {
-		set_insert(hash_set, entry);
-		return;
+	if (hash_set == TRIE_NULL) {
+		/* Otherwise, the value needs a new list */
+		hash_set = set_new(&pointer_hash, &pointer_equal);
+		slist_prepend(&info->duplicates, hash_set);
+		trie_insert(info->hash_trie, entry->hash, hash_set);
 	}
-	/* Otherwise, the value needs a new list */
-	hash_set = set_new(&pointer_hash, &pointer_equal);
-	slist_prepend(&info->duplicates, hash_set);
-	trie_insert(info->hash_trie, entry->hash, hash_set);
+	if (!set_insert(hash_set, entry)) {
+		#ifndef NDEBUG
+		fprintf(stderr, "[DEBUG] '%s' (extra file)\n", entry->path);
+		#endif
+	}
 }
 
 int
 main(int argc, char *argv[])
 {
-	/* For traversing structures */
-	DIR *directory;
-	size_t path_len;
+	size_t path_len, total_files;
+	off_t bytes_wasted, total_wasted;
 	char path_buffer[PATH_MAX_LEN], *hash_value;
 	struct file_entry_t *file_entry, *trie_entry;
+
 	SListIterator slist_iterator;
 	SetIterator set_iterator;
 
@@ -71,7 +74,7 @@ main(int argc, char *argv[])
 			/* Append a trailing slash */
 			path_buffer[path_len] = '/';
 			/* Record all contents (may push onto file stack or one of the lists) */
-			directory = opendir(file_entry->path);
+			DIR *directory = opendir(file_entry->path);
 			if (traverse(&file_info, directory, path_buffer, ++path_len)) {
 				fprintf(stderr, "[FATAL] out of memory\n");
 				destroy_info(&file_info);
@@ -153,15 +156,16 @@ main(int argc, char *argv[])
 					printf("[DEBUG] '%s' (false positive)\n", file_entry->path);
 					#endif
 					trie_insert(file_info.shash_trie, file_entry->shash, file_entry);
+				} else {
+					/* Get the full hash of the old file */
+					hash_value = hash_entry(trie_entry, FULL);
+					#ifndef NDEBUG
+					if (hash_value) {
+						printf("[-HASH] %s\t*%s\n", trie_entry->path, hash_value);
+					}
+					#endif
+					archive(&file_info, trie_entry);
 				}
-				/* Get the full hash of the old file */
-				hash_value = hash_entry(trie_entry, FULL);
-				#ifndef NDEBUG
-				if (hash_value) {
-					printf("[-HASH] %s\t*%s\n", trie_entry->path, hash_value);
-				}
-				#endif
-				archive(&file_info, trie_entry);
 			} else {
 				/* Add a record of this shash to the filter */
 				bloom_filter_insert(file_info.shash_filter, hash_value);
@@ -171,16 +175,31 @@ main(int argc, char *argv[])
 	}
 
 	/* Step 5: Output results and cleanup before exit */
+	printf("[EXTRA] Found %lu sets of duplicates...\n",
+		(unsigned long)(slist_length(file_info.duplicates)));
 	slist_iterate(&file_info.duplicates, &slist_iterator);
-	while (slist_iter_has_more(&slist_iterator)) {
-		set_iterate(slist_iter_next(&slist_iterator), &set_iterator);
-		while (set_iter_has_more(&set_iterator)) {
+	for (total_files = total_wasted = 0;
+		slist_iter_has_more(&slist_iterator);
+		total_wasted += bytes_wasted)
+	{
+		Set *set = slist_iter_next(&slist_iterator);
+		set_iterate(set, &set_iterator);
+		printf("[EXTRA] '%lu' files (w/ same hash):\n",
+			(unsigned long)(set_num_entries(set)));
+		for (bytes_wasted = 0;
+			set_iter_has_more(&set_iterator);
+			bytes_wasted += file_entry->size,
+			++total_files)
+		{
 			file_entry = set_iter_next(&set_iterator);
-			#ifndef NDEBUG
-			printf("[EXTRA] %s\t*%s\n", file_entry->path, file_entry->hash);
-			#endif
+			printf("\t%s (%lu bytes)\n",
+				file_entry->path,
+				(unsigned long)(file_entry->size));
 		}
 	}
+	printf("[EXTRA] %lu bytes in %lu files (wasted)\n",
+		(unsigned long)(total_wasted),
+		(unsigned long)(total_files));
 	destroy_info(&file_info);
 	return (EXIT_SUCCESS);
 }
