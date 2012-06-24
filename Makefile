@@ -1,6 +1,7 @@
 CC = gcc
 CFLAGS = -c -Wall -Wextra -D_FILE_OFFSET_BITS=64
 DFLAGS = -g -O0 -pedantic
+GFLAGS = `pkg-config --cflags --libs gtk+-2.0` -lnotify
 IFLAGS = -b -s -v
 LFLAGS = -lm -lcalg -lssl
 PFLAGS = -g -p -pg
@@ -58,4 +59,10 @@ test: release
 	./bloom_release bloom_test | tee test001.out
 	diff -s test001.txt test001.out
 
-.PHONY: all debug profile release install uninstall clean test
+monitor: monitor.c
+	$(CC) -Wall -Wextra $(DFLAGS) $(GFLAGS) monitor.c -o bloom_monitor
+
+notify: notify.c
+	$(CC) -Wall -Wextra $(DFLAGS) $(GFLAGS) notify.c -o bloom_notify
+
+.PHONY: all debug profile release install uninstall clean test monitor notify
