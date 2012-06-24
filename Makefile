@@ -40,6 +40,8 @@ uninstall: /usr/local/bin/bloom
 clean:
 	$(RM) bloom_debug
 	$(RM) bloom_debug.o
+	$(RM) bloom_monitor
+	$(RM) bloom_notify
 	$(RM) bloom_profile
 	$(RM) bloom_profile.o
 	$(RM) bloom_release
