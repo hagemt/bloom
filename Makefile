@@ -44,16 +44,18 @@ clean:
 	$(RM) bloom_release
 	$(RM) bloom_release.o
 	$(RM) -r bloom_test
+	$(RM) test001.out
 	$(RM) gmon.out
 
-test: bloom_release
+test: release
 	mkdir -p bloom_test bloom_test/sub bloom_test/dir
-	echo "copy1" > bloom_test/copy1.txt; done
+	echo "copy1" > bloom_test/copy1.txt
 	cp bloom_test/copy1.txt bloom_test/dir
-	echo "copy2" > bloom_test/copy2.txt; done
+	echo "copy2" > bloom_test/copy2.txt
 	cp bloom_test/copy2.txt -r bloom_test/dir bloom_test/sub
-	echo "copy3" > bloom_test/copy3.txt; done
+	echo "copy3" > bloom_test/copy3.txt
 	tree bloom_test
-	./bloom_release bloom_test
+	./bloom_release bloom_test | tee test001.out
+	diff -s test001.txt test001.out
 
 .PHONY: all debug profile release install uninstall clean test

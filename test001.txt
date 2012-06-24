@@ -1,0 +1,9 @@
+[EXTRA] Found 2 sets of duplicates...
+[EXTRA] 2 files (w/ same hash):
+	bloom_test/copy2.txt (6 bytes)
+	bloom_test/sub/copy2.txt (6 bytes)
+[EXTRA] 3 files (w/ same hash):
+	bloom_test/copy1.txt (6 bytes)
+	bloom_test/sub/dir/copy1.txt (6 bytes)
+	bloom_test/dir/copy1.txt (6 bytes)
+[EXTRA] 30 bytes in 5 files (wasted)
