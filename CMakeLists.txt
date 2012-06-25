@@ -27,12 +27,14 @@ target_link_libraries(bloom ${LIBALGO} ${LIBHASH} ${LIBMATH})
 
 if(BUILD_MONITOR)
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GIO_PKG gio-2.0)
-  include_directories(${GIO_PKG_INCLUDE_DIRS})
-  link_directories(${GIO_PKG_LIBRARY_DIRS})
-  add_executable(bloomd monitor.c)
+  pkg_check_modules(GTK_PKG gtk+-2.0)
+  include_directories(${GTK_PKG_INCLUDE_DIRS})
+  link_directories(${GTK_PKG_LIBRARY_DIRS})
+  # Require libnotify
   find_library(LIBNOTIFY notify REQUIRED)
-  target_link_libraries(bloomd ${GIO_PKG_LIBRARIES} ${LIBNOTIFY})
+  # Daemon target
+  add_executable(bloomd monitor.c)
+  target_link_libraries(bloomd ${GTK_PKG_LIBRARIES} ${LIBNOTIFY})
 endif(BUILD_MONITOR)
 
 include(CTest)

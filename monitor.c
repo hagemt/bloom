@@ -1,93 +1,12 @@
-#include <gio/gio.h>
-
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "monitor.h"
+
 static GMainLoop *main_loop = NULL;
 static struct sigaction signal_action;
-
-struct slent_t
-{
-	GFile *file;
-	GFileMonitor *file_monitor;
-};
-
-struct slist_t
-{
-	struct slent_t *head;
-	struct slist_t *tail;
-} list;
-
-/* Callback */
-#define EVENT_FORMAT "[EVENT %p] %s %c %s\n"
-void
-entry_changed(GFileMonitor *monitor,
-		GFile *file1, GFile *file2,
-		GFileMonitorEvent type,
-		gpointer __attribute__ ((unused)) data)
-{
-	char *filepath1, *filepath2;
-	filepath1 = g_file_get_uri(file1);
-	switch (type) {
-		case G_FILE_MONITOR_EVENT_MOVED:
-			filepath2 = g_file_get_uri(file2);
-			fprintf(stderr, EVENT_FORMAT, (void *)(monitor), filepath1, '>', filepath2);
-			g_free(filepath2);
-			break;
-		case G_FILE_MONITOR_EVENT_CREATED:
-			fprintf(stderr, EVENT_FORMAT, (void *)(monitor), filepath1, '.', "created");
-			break;
-		case G_FILE_MONITOR_EVENT_DELETED:
-			fprintf(stderr, EVENT_FORMAT, (void *)(monitor), filepath1, '!', "deleted");
-			break;
-		default:
-			fprintf(stderr, EVENT_FORMAT, (void *)(monitor), filepath1, '?', "unknown");
-	}
-	g_free(filepath1);
-}
-
-/* Construct entries */
-inline gboolean
-create(char *args, struct slent_t *entry)
-{
-	if (entry) {
-		entry->file = g_file_new_for_commandline_arg(args);
-		if (g_file_query_exists(entry->file, NULL)) {
-			/* Last two nulls disregard cancel and error */
-			entry->file_monitor = g_file_monitor(
-					entry->file,
-					(G_FILE_MONITOR_WATCH_MOUNTS | G_FILE_MONITOR_SEND_MOVED),
-					NULL,
-					NULL);
-			g_signal_connect_after(
-					entry->file_monitor,
-					"changed",
-					G_CALLBACK(entry_changed),
-					NULL);
-			return TRUE;
-		}
-		g_object_unref(entry->file);
-	}
-	return FALSE;
-}
-
-/* Cleanup entries */
-inline void
-destroy(struct slent_t *entry)
-{
-	if (entry) {
-		if (entry->file_monitor) {
-			g_file_monitor_cancel(entry->file_monitor);
-			g_object_unref(entry->file_monitor);
-		}
-		if (entry->file) {
-			g_object_unref(entry->file);
-		}
-		free(entry);
-	}
-}
 
 void
 handle_signal(int signum)
@@ -137,6 +56,7 @@ main(int argc, char *argv[])
 {
 	struct slist_t *current, *next;
 
+	/* Signal handling */
 	struct sigaction old_signal_action;
 	sigset_t termination_signals;
 	sigemptyset(&termination_signals);
@@ -155,13 +75,19 @@ main(int argc, char *argv[])
 	}
 	memcpy(&signal_action.sa_mask, &termination_signals, sizeof(sigset_t));
 
-	/* Init */
+	/* Initialization */
 	g_type_init();
+	//setlocale(LC_ALL, "");
+	//gtk_init(&argc, &argv);
+	if (!notify_init(NOTIFY_APP_NAME)) {
+		fprintf(stderr, "[FATAL] '%s' (notify_init)\n", NOTIFY_APP_NAME);
+		return (EXIT_FAILURE);
+	}
 	list.head = NULL;
 	list.tail = NULL;
 	current = &list;
 
-	/* Parse */
+	/* Argument Parsing (TODO improve) */
 	while (--argc) {
 		next = malloc(sizeof(struct slist_t));
 		next->head = malloc(sizeof(struct slent_t));
@@ -176,6 +102,7 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/* Main Loop */
 	main_loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(main_loop);
 	handle_signal(0);
