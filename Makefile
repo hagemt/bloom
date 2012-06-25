@@ -3,7 +3,7 @@ CFLAGS = -c -Wall -Wextra -D_FILE_OFFSET_BITS=64
 DFLAGS = -g -O0 -pedantic
 GFLAGS = `pkg-config --cflags --libs gtk+-2.0` -lnotify
 IFLAGS = -b -s -v
-LFLAGS = -lm -lcalg -lcrypto
+LFLAGS = -lcalg -lcrypto -lm
 PFLAGS = -g -p -pg
 RFLAGS = -DNDEBUG -O3
 WFLAGS = -Wall -Wextra -pedantic
@@ -41,7 +41,6 @@ clean:
 	$(RM) bloom_debug
 	$(RM) bloom_debug.o
 	$(RM) bloom_monitor
-	$(RM) bloom_notify
 	$(RM) bloom_profile
 	$(RM) bloom_profile.o
 	$(RM) bloom_release
@@ -57,14 +56,11 @@ test: release
 	echo "copy2" > bloom_test/copy2.txt
 	cp bloom_test/copy2.txt -r bloom_test/dir bloom_test/sub
 	echo "copy3" > bloom_test/copy3.txt
-	tree bloom_test
+	tree -a -h bloom_test
 	./bloom_release bloom_test | tee test001.out
-	diff -s test001.txt test001.out
+	diff -y -s test001.txt test001.out
 
 monitor: monitor.c
 	$(CC) -Wall -Wextra $(DFLAGS) $(GFLAGS) monitor.c -o bloom_monitor
 
-notify: notify.c
-	$(CC) -Wall -Wextra $(DFLAGS) $(GFLAGS) notify.c -o bloom_notify
-
-.PHONY: all debug profile release install uninstall clean test monitor notify
+.PHONY: all debug profile release install uninstall clean test monitor
