@@ -1,3 +1,4 @@
+#include <locale.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -27,6 +28,7 @@ handle_signal(int signum)
 		}
 		g_main_loop_unref(main_loop);
 	}
+	notify_uninit();
 
 	/* Cleanup the list */
 	current = list.tail;
@@ -76,9 +78,8 @@ main(int argc, char *argv[])
 	memcpy(&signal_action.sa_mask, &termination_signals, sizeof(sigset_t));
 
 	/* Initialization */
-	g_type_init();
-	//setlocale(LC_ALL, "");
-	//gtk_init(&argc, &argv);
+	setlocale(LC_ALL, "");
+	gtk_init(&argc, &argv);
 	if (!notify_init(NOTIFY_APP_NAME)) {
 		fprintf(stderr, "[FATAL] '%s' (notify_init)\n", NOTIFY_APP_NAME);
 		return (EXIT_FAILURE);

@@ -1,5 +1,10 @@
 #ifndef MONITOR_H
 #define MONITOR_H
+#include <assert.h>
+#include <stdlib.h>
+
+#include <gio/gio.h>
+
 #include <libnotify/notify.h>
 
 void display_event(char *, char *);
@@ -69,11 +74,15 @@ destroy(struct slent_t *entry)
 void
 display_event(char *title, char * message)
 {
-	NotifyNotification *n = notify_notification_new(title, message, NOTIFY_TYPE, NULL);
+	NotifyNotification *n;
+	assert(notify_is_initted());
+	/* Use a notification to alert the user */
+	n = notify_notification_new(title, message, NOTIFY_TYPE, NULL);
 	notify_notification_set_timeout(n, NOTIFY_TIMEOUT);
 	notify_notification_set_category(n, NOTIFY_APP_NAME);
 	notify_notification_set_urgency(n, NOTIFY_URGENCY_CRITICAL);
 	notify_notification_show(n, NULL);
+	g_object_unref(n);
 }
 
 void
