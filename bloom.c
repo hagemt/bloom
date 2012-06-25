@@ -16,7 +16,9 @@
 #include "file_info.h"
 #include "file_hash.h"
 
-void archive(struct file_info_t *info, struct file_entry_t *entry) {
+void
+archive(struct file_info_t *info, struct file_entry_t *entry)
+{
 	Set *hash_set = trie_lookup(info->hash_trie, entry->hash);
 	if (hash_set == TRIE_NULL) {
 		/* Otherwise, the value needs a new list */
@@ -178,13 +180,14 @@ main(int argc, char *argv[])
 	printf("[EXTRA] Found %lu sets of duplicates...\n",
 		(unsigned long)(slist_length(file_info.duplicates)));
 	slist_iterate(&file_info.duplicates, &slist_iterator);
-	for (total_files = total_wasted = 0;
+	for (total_files = total_wasted = bytes_wasted = 0;
 		slist_iter_has_more(&slist_iterator);
 		total_wasted += bytes_wasted)
 	{
 		Set *set = slist_iter_next(&slist_iterator);
-		printf("[EXTRA] %lu files (w/ same hash):\n",
-			(unsigned long)(set_num_entries(set)));
+		int size = set_num_entries(set);
+		if (size < 2) { continue; }
+		printf("[EXTRA] %lu files (w/ same hash):\n", (unsigned long)(size));
 		set_iterate(set, &set_iterator);
 		for (bytes_wasted = 0;
 			set_iter_has_more(&set_iterator);
