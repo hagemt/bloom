@@ -1,5 +1,4 @@
 #include <gio/gio.h>
-#include <glib.h>
 
 #include <signal.h>
 #include <stdlib.h>
