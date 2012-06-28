@@ -40,6 +40,14 @@ struct slent_t
 /* Simple list entry manipulations */
 inline void monitor(struct slent_t *);
 inline void unmonitor(struct slent_t *);
+inline gboolean
+is_directory(GFile *file)
+{
+	return g_file_query_exists(file, NULL) &&
+		g_file_query_file_type(file,
+				G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+				NULL) == G_FILE_TYPE_DIRECTORY;
+}
 
 /* Construct entries */
 gboolean
@@ -50,10 +58,8 @@ create(char *arg, struct slent_t *entry)
 		entry->file_monitor = NULL;
 		entry->connection_id = 0;
 		/* Try to monitor the file */
-		if (g_file_query_exists(entry->file, NULL)) {
-			if (g_file_query_file_type(entry->file, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL) == G_FILE_TYPE_DIRECTORY) {
-				monitor(entry);
-			}
+		if (is_directory(entry->file)) {
+			monitor(entry);
 			return TRUE;
 		}
 		g_object_unref(entry->file);
@@ -107,21 +113,24 @@ changed(GFileMonitor *file_monitor,
 		case G_FILE_MONITOR_EVENT_MOVED:
 			#ifndef NDEBUG
 			filepath2 = g_file_get_uri(file2);
-			fprintf(stderr, EVENT_FORMAT, (void *)(file_monitor), filepath1, '>', filepath2);
+			fprintf(stderr, EVENT_FORMAT,
+					(void *)(file_monitor), filepath1, '>', filepath2);
 			g_free(filepath2);
 			#endif
-			/* Replace the entry */
-			assert(file1 == entry->file);
-			unmonitor(entry);
-			g_object_unref(entry->file);
-			entry->file = g_file_dup(file2);
-			monitor(entry);
+			/* Replace the entry if necessary */
+			if (entry->file == file1 && is_directory(file1)) {
+				unmonitor(entry);
+				g_object_unref(entry->file);
+				entry->file = g_file_dup(file2);
+				monitor(entry);
+			}
 			break;
 		case G_FILE_MONITOR_EVENT_CREATED:
 			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT, (void *)(file_monitor), filepath1, '.', "created");
+			fprintf(stderr, EVENT_FORMAT,
+					(void *)(file_monitor), filepath1, '.', "created");
 			#endif
-			/* Create new entry */
+			/* Create new entry if necessary */
 			entry = malloc(sizeof(struct slent_t));
 			if (create(filepath1, entry)) {
 				node = malloc(sizeof(struct slist_t));
@@ -134,13 +143,17 @@ changed(GFileMonitor *file_monitor,
 			break;
 		case G_FILE_MONITOR_EVENT_DELETED:
 			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT, (void *)(file_monitor), filepath1, '!', "deleted");
+			fprintf(stderr, EVENT_FORMAT,
+					(void *)(file_monitor), filepath1, '!', "deleted");
 			#endif
-			/* TODO remove monitors in descendants */
+			if (entry->file == file1) {
+				unmonitor(entry);
+			}
 			break;
 		default:
 			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT, (void *)(file_monitor), filepath1, '?', "unknown");
+			fprintf(stderr, EVENT_FORMAT,
+					(void *)(file_monitor), filepath1, '?', "unknown");
 			#endif
 			show = FALSE;
 	}
@@ -148,7 +161,8 @@ changed(GFileMonitor *file_monitor,
 	if (show) {
 		#define BUFFER_SIZE 1024
 		filepath2 = calloc(BUFFER_SIZE, sizeof(char));
-		snprintf(filepath2, BUFFER_SIZE, "%s reports [%i:%p]", filepath1, (int)(type), (void *)(file_monitor));
+		snprintf(filepath2, BUFFER_SIZE, "%s reports [ENTRY %p] %i",
+				filepath1, (void *)(file_monitor), (int)(type));
 		#ifndef NDEBUG
 		fprintf(stderr, "[NOTIFY] %s: %s\n", NOTIFY_APP_NAME, filepath2);
 		#else
@@ -168,8 +182,10 @@ monitor(struct slent_t *entry)
 		unmonitor(entry);
 	}
 	/* Last two nulls disregard cancel and error */
-	entry->file_monitor = g_file_monitor(entry->file, G_FILE_MONITOR_SEND_MOVED, NULL, NULL);
-	entry->connection_id = g_signal_connect_after(entry->file_monitor, "changed", G_CALLBACK(changed), entry);
+	entry->file_monitor = g_file_monitor(
+			entry->file, G_FILE_MONITOR_SEND_MOVED, NULL, NULL);
+	entry->connection_id = g_signal_connect_after(
+			entry->file_monitor, "changed", G_CALLBACK(changed), entry);
 	#ifndef NDEBUG
 	char *uri = g_file_get_uri(entry->file);
 	if (g_signal_handler_is_connected(entry->file_monitor, entry->connection_id)) {
@@ -189,8 +205,10 @@ unmonitor(struct slent_t *entry)
 	char *uri = g_file_get_uri(entry->file);
 	#endif
 	if (entry->file_monitor) {
-		if (g_signal_handler_is_connected(entry->file_monitor, entry->connection_id)) {
-			g_signal_handler_disconnect(entry->file_monitor, entry->connection_id);
+		if (g_signal_handler_is_connected(
+					entry->file_monitor, entry->connection_id)) {
+			g_signal_handler_disconnect(
+					entry->file_monitor, entry->connection_id);
 			#ifndef NDEBUG
 			fprintf(stderr, "[DISCONNECTED %p] %s\n", (void *)(entry), uri);
 			#endif
@@ -198,11 +216,13 @@ unmonitor(struct slent_t *entry)
 		if (!g_file_monitor_is_cancelled(entry->file_monitor)) {
 			if (g_file_monitor_cancel(entry->file_monitor)) {
 				#ifndef NDEBUG
-				fprintf(stderr, "[CANCELLED %p] %s\n", (void *)(entry), uri);
+				fprintf(stderr, "[CANCELLED %p] %s\n",
+						(void *)(entry), uri);
 				#endif
 			} else {
 				#ifndef NDEBUG
-				fprintf(stderr, "[WARNING %p] %s (failure to cancel)\n", (void *)(entry), uri);
+				fprintf(stderr, "[WARNING %p] %s (failure to cancel)\n",
+						(void *)(entry), uri);
 				#endif
 			}
 		}

@@ -36,11 +36,16 @@ handle_signal(int signum)
 	current = list.tail;
 	while (current) {
 		#ifndef NDEBUG
-		char *uri = g_file_get_uri(current->head->file);
-		gboolean cancelled = g_file_monitor_is_cancelled(current->head->file_monitor); 
+		char *uri = g_file_get_uri(current->head->file), *state;
+		if (!current->head->file_monitor) {
+			state = "unknowned";
+		} else if (g_file_monitor_is_cancelled(current->head->file_monitor)) {
+			state = "cancelled";
+		} else {
+			state = "monitored";
+		}
 		fprintf(stderr, "[ENTRY %p] '%s' (%s)\n",
-				(void *)(current->head),
-				uri, cancelled ? "cancelled" : "monitored");
+				(void *)(current->head), uri, state);
 		g_free(uri);
 		#endif
 		destroy(current->head);
@@ -102,7 +107,7 @@ main(int argc, char *argv[])
 			current->tail = next;
 			current = current->tail;
 		} else {
-			fprintf(stderr, "[ERROR] '%s' (does not exist)\n", argv[argc]);
+			fprintf(stderr, "[WARNING] '%s' (non-directory)\n", argv[argc]);
 			free(next->head);
 			free(next);
 		}
