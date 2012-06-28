@@ -97,7 +97,7 @@ struct slist_t
 char letter(GFileMonitorEvent type) {
 	switch (type) {
 	case G_FILE_MONITOR_EVENT_MOVED: return '>';
-	case G_FILE_MONITOR_EVENT_CREATED: return '.';
+	case G_FILE_MONITOR_EVENT_CREATED: return ':';
 	case G_FILE_MONITOR_EVENT_DELETED: return '!';
 	default: return '?';	
 	}
