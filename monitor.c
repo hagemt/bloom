@@ -15,7 +15,6 @@ handle_signal(int signum)
 	struct slist_t *current, *next;
 
 	/* Notify user */
-	putchar('\n');
 	#ifndef NDEBUG
 	if (signum) {
 		fprintf(stderr, "[WARNING] '%s' signal caught (code %i)\n",

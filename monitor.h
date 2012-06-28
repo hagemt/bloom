@@ -28,6 +28,15 @@ display(char *title, char *message)
 	g_object_unref(n);
 }
 
+inline gboolean
+is_directory(GFile *file)
+{
+	return g_file_query_exists(file, NULL) &&
+		g_file_query_file_type(file,
+				G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+				NULL) == G_FILE_TYPE_DIRECTORY;
+}
+
 /* A simple list entry */
 struct slent_t
 {
@@ -40,14 +49,6 @@ struct slent_t
 /* Simple list entry manipulations */
 inline void monitor(struct slent_t *);
 inline void unmonitor(struct slent_t *);
-inline gboolean
-is_directory(GFile *file)
-{
-	return g_file_query_exists(file, NULL) &&
-		g_file_query_file_type(file,
-				G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
-				NULL) == G_FILE_TYPE_DIRECTORY;
-}
 
 /* Construct entries */
 gboolean
@@ -93,6 +94,24 @@ struct slist_t
 
 /* Callback and helper functions */
 
+char letter(GFileMonitorEvent type) {
+	switch (type) {
+	case G_FILE_MONITOR_EVENT_MOVED: return '>';
+	case G_FILE_MONITOR_EVENT_CREATED: return '.';
+	case G_FILE_MONITOR_EVENT_DELETED: return '!';
+	default: return '?';	
+	}
+}
+
+const char *word(GFileMonitorEvent type) {
+	switch (type) {
+	case G_FILE_MONITOR_EVENT_MOVED: return "moved";
+	case G_FILE_MONITOR_EVENT_CREATED: return "created";
+	case G_FILE_MONITOR_EVENT_DELETED: return "deleted";
+	default: return "unknown";	
+	}
+}
+
 #define EVENT_FORMAT "[EVENT %p] %s %c %s\n"
 
 void
@@ -108,13 +127,19 @@ changed(GFileMonitor *file_monitor,
 	gboolean show = TRUE;
 	entry = (struct slent_t *)(data);
 	filepath1 = g_file_get_uri(file1);
+	#ifndef NDEBUG
+	fprintf(stderr, EVENT_FORMAT,
+			(void *)(file_monitor),
+			filepath1, letter(type), word(type));
+	#endif
 	/* Behavior is dependent on event type */
 	switch (type) {
 		case G_FILE_MONITOR_EVENT_MOVED:
 			#ifndef NDEBUG
 			filepath2 = g_file_get_uri(file2);
 			fprintf(stderr, EVENT_FORMAT,
-					(void *)(file_monitor), filepath1, '>', filepath2);
+					(void *)(file_monitor),
+					filepath1, letter(type), filepath2);
 			g_free(filepath2);
 			#endif
 			/* Replace the entry if necessary */
@@ -126,10 +151,6 @@ changed(GFileMonitor *file_monitor,
 			}
 			break;
 		case G_FILE_MONITOR_EVENT_CREATED:
-			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT,
-					(void *)(file_monitor), filepath1, '.', "created");
-			#endif
 			/* Create new entry if necessary */
 			entry = malloc(sizeof(struct slent_t));
 			if (create(filepath1, entry)) {
@@ -142,27 +163,22 @@ changed(GFileMonitor *file_monitor,
 			}
 			break;
 		case G_FILE_MONITOR_EVENT_DELETED:
-			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT,
-					(void *)(file_monitor), filepath1, '!', "deleted");
-			#endif
 			if (entry->file == file1) {
 				unmonitor(entry);
 			}
 			break;
 		default:
-			#ifndef NDEBUG
-			fprintf(stderr, EVENT_FORMAT,
-					(void *)(file_monitor), filepath1, '?', "unknown");
-			#endif
 			show = FALSE;
 	}
 	/* Display a notification if necessary */
 	if (show) {
+		g_free(filepath1);
+		filepath1 = g_file_get_basename(file1);
 		#define BUFFER_SIZE 1024
 		filepath2 = calloc(BUFFER_SIZE, sizeof(char));
-		snprintf(filepath2, BUFFER_SIZE, "%s reports [ENTRY %p] %i",
-				filepath1, (void *)(file_monitor), (int)(type));
+		snprintf(filepath2, BUFFER_SIZE, "%c%s %s",
+				letter(type), filepath1, word(type));
+		#undef BUFFER_SIZE
 		#ifndef NDEBUG
 		fprintf(stderr, "[NOTIFY] %s: %s\n", NOTIFY_APP_NAME, filepath2);
 		#else
