@@ -60,7 +60,7 @@ test: release
 	./bloom_release bloom_test | tee test001.out
 	diff -y -s test001.txt test001.out
 
-monitor: monitor.c
+monitor: monitor.h monitor.c
 	$(CC) -Wall -Wextra $(DFLAGS) $(GFLAGS) monitor.c -o bloom_monitor
 
 .PHONY: all debug profile release install uninstall clean test monitor
