@@ -16,10 +16,12 @@ handle_signal(int signum)
 
 	/* Notify user */
 	putchar('\n');
+	#ifndef NDEBUG
 	if (signum) {
-		fprintf(stderr, "[WARNING] signal caught [code %i: %s]\n",
-				signum, strsignal(signum));
+		fprintf(stderr, "[WARNING] '%s' signal caught (code %i)\n",
+				strsignal(signum), signum);
 	}
+	#endif
 
 	/* Stop the main loop */
 	if (main_loop) {
@@ -34,9 +36,12 @@ handle_signal(int signum)
 	current = list.tail;
 	while (current) {
 		#ifndef NDEBUG
-		fprintf(stderr, "[ENTRY] { %p, %p }\n",
-				(void *)(current->head->file),
-				(void *)(current->head->file_monitor));
+		char *uri = g_file_get_uri(current->head->file);
+		gboolean cancelled = g_file_monitor_is_cancelled(current->head->file_monitor); 
+		fprintf(stderr, "[ENTRY %p] '%s' (%s)\n",
+				(void *)(current->head),
+				uri, cancelled ? "cancelled" : "monitored");
+		g_free(uri);
 		#endif
 		destroy(current->head);
 		next = current->tail;
