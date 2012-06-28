@@ -50,9 +50,10 @@ create(char *arg, struct slent_t *entry)
 		entry->file_monitor = NULL;
 		entry->connection_id = 0;
 		/* Try to monitor the file */
-		if (entry->file) {
-			/* TODO only monitor directories? */
-			monitor(entry);
+		if (g_file_query_exists(entry->file, NULL)) {
+			if (g_file_query_file_type(entry->file, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL) == G_FILE_TYPE_DIRECTORY) {
+				monitor(entry);
+			}
 			return TRUE;
 		}
 		g_object_unref(entry->file);
