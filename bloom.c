@@ -16,6 +16,8 @@
 #include "file_info.h"
 #include "file_hash.h"
 
+#include "persist.h"
+
 void
 archive(struct file_info_t *info, struct file_entry_t *entry)
 {
@@ -131,8 +133,7 @@ main(int argc, char *argv[])
 	if (slist_length(file_info.good_files) > 0) {
 		file_info.hash_trie = trie_new();
 		file_info.shash_trie = trie_new();
-		/* FIXME is this ^ really necessary, two swipes? */
-		file_info.shash_filter = create_filter(slist_length(file_info.good_files));
+		optimize_filter(&file_info);
 		/* Extract each file from the list (they should all be regular) */
 		slist_iterate(&file_info.good_files, &slist_iterator);
 		while (slist_iter_has_more(&slist_iterator)) {
@@ -174,6 +175,7 @@ main(int argc, char *argv[])
 				trie_insert(file_info.shash_trie, hash_value, file_entry);
 			}
 		}
+		persist("filter.bloom", &file_info);
 	}
 
 	/* Step 5: Output results and cleanup before exit */
