@@ -3,7 +3,7 @@ CFLAGS = -c -Wall -Wextra -D_FILE_OFFSET_BITS=64
 DFLAGS = -g -O0 -pedantic
 GFLAGS = `pkg-config --cflags --libs gtk+-2.0` -lnotify
 IFLAGS = -b -s -v
-LFLAGS = -lcalg -lcrypto -lm
+LFLAGS = -lcalg -lcrypto -lgdbm -lm -lz
 PFLAGS = -g -p -pg
 RFLAGS = -DNDEBUG -O3
 WFLAGS = -Wall -Wextra -pedantic

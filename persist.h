@@ -12,24 +12,42 @@
 #include <libcalg-1.0/libcalg/bloom-filter.h>
 #include <libcalg-1.0/libcalg/hash-string.h>
 
+#include <gdbm.h>
+
+#include <zlib.h>
+
 #include "file_info.h"
+#include "file_log.h"
 
 #define BLOOM_PERSISTENCE_ERROR (-1)
 #define BUFFER_SIZE 4096
+
+#define BLOOM_EXT_BACKUP   "bak"
+#define BLOOM_EXT_FILTER   "bbf"
+#define BLOOM_EXT_CONFIG   "bcf"
+#define BLOOM_EXT_DATABASE "bdb"
+
+#define BLOOM_CHAR_HASH_INDICATOR  '+'
+#define BLOOM_CHAR_SHASH_INDICATOR '-'
 
 int
 persist(char *backup_file, struct file_info_t *file_info)
 {
 	int fd;
+	time_t time_stamp;
 	char buffer[BUFFER_SIZE];
 	bloom_size_t data_size;
 	unsigned char *data_buffer;
-	if (!backup_file || !file_info || !file_info->shash_filter) {
+	if (!backup_file || !file_info
+			|| *backup_file == '\0'
+			|| !file_info->shash_filter) {
 		return BLOOM_PERSISTENCE_ERROR;
 	}
+	time(&time_stamp);
 	/* If the file exists, move it to backup */
 	if (!access(backup_file, F_OK)) {
-		snprintf(buffer, BUFFER_SIZE, "%s.%lu.bak", backup_file, time(NULL));
+		snprintf(buffer, BUFFER_SIZE, "%s.%lu.%s",
+				backup_file, (long unsigned)(time_stamp), BLOOM_EXT_BACKUP);
 		/* Inability to do this triggers a failure */
 		if (rename(backup_file, buffer)) {
 			#ifndef NDEBUG
@@ -40,7 +58,9 @@ persist(char *backup_file, struct file_info_t *file_info)
 		}
 	}
 	/* Try to open the file */
-	if ((fd = creat(backup_file, S_IRUSR | S_IWUSR)) < 0) {
+	snprintf(buffer, BUFFER_SIZE, "%s.%lu.%s",
+			backup_file, (long unsigned)(time_stamp), BLOOM_EXT_CONFIG);
+	if ((fd = creat(buffer, S_IRUSR | S_IWUSR)) < 0) {
 		#ifndef NDEBUG
 		fprintf(stderr, "[ERROR] %s (unable to persist)\n", backup_file);
 		#endif
@@ -67,6 +87,15 @@ persist(char *backup_file, struct file_info_t *file_info)
 		fprintf(stderr, "[WARNING] %s (close failed)\n", backup_file);
 		#endif
 	}
+	/* Persist the data entries */
+	snprintf(buffer, BUFFER_SIZE, "%s%c%lu.%s",
+			backup_file, BLOOM_CHAR_HASH_INDICATOR,
+			(long unsigned)(time_stamp), BLOOM_EXT_DATABASE);
+	GDBM_FILE gdbmf = gdbm_open(buffer, BUFFER_SIZE,
+			GDBM_NEWDB, S_IRUSR | S_IWUSR, log_message);
+	/* TODO Dump the hashsets (shash/hash) into bdb files */
+	gdbm_close(gdbmf);
+	/* TODO gzip everything into backup_file */
 	return 0;
 }
 
@@ -98,6 +127,7 @@ recover(char *backup_file, struct file_info_t *file_info)
 		fprintf(stderr, "[WARNING] bytes lost (%s)\n", "bloom table recover");
 		#endif
 	}
+	/* Load it into the file information */
 	optimize_filter(file_info);
 	bloom_filter_load(file_info->shash_filter, data_buffer);
 	/* Cleanup */
