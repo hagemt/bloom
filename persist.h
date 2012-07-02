@@ -11,6 +11,7 @@
 
 #include <libcalg-1.0/libcalg/bloom-filter.h>
 #include <libcalg-1.0/libcalg/hash-string.h>
+#include <libcalg-1.0/libcalg/slist.h>
 
 #include <gdbm.h>
 
@@ -33,17 +34,25 @@
 int
 persist(char *backup_file, struct file_info_t *file_info)
 {
-	int fd;
+	/* For file manipulation */
 	time_t time_stamp;
 	char buffer[BUFFER_SIZE];
+	/* For table */
+	int fd, status;
 	bloom_size_t data_size;
 	unsigned char *data_buffer;
+	/* For entries */
+	GDBM_FILE gdbmf;
+	datum key, value;
+	SListIterator slist_iterator;
+	/* Check for valid arguments */
 	if (!backup_file || !file_info
 			|| *backup_file == '\0'
 			|| !file_info->shash_filter) {
 		return BLOOM_PERSISTENCE_ERROR;
 	}
 	time(&time_stamp);
+	status = (int)(sizeof(bloom_size_t));
 	/* If the file exists, move it to backup */
 	if (!access(backup_file, F_OK)) {
 		snprintf(buffer, BUFFER_SIZE, "%s.%lu.%s",
@@ -59,7 +68,7 @@ persist(char *backup_file, struct file_info_t *file_info)
 	}
 	/* Try to open the file */
 	snprintf(buffer, BUFFER_SIZE, "%s.%lu.%s",
-			backup_file, (long unsigned)(time_stamp), BLOOM_EXT_CONFIG);
+			backup_file, (long unsigned)(time_stamp), BLOOM_EXT_FILTER);
 	if ((fd = creat(buffer, S_IRUSR | S_IWUSR)) < 0) {
 		#ifndef NDEBUG
 		fprintf(stderr, "[ERROR] %s (unable to persist)\n", backup_file);
@@ -68,7 +77,7 @@ persist(char *backup_file, struct file_info_t *file_info)
 	}
 	/* Persist the filter data */
 	data_size = (file_info->table_size + 7) / 8;
-	if (write(fd, &data_size, sizeof(bloom_size_t)) < sizeof(bloom_size_t)) {
+	if (write(fd, &data_size, status) < status) {
 		#ifndef NDEBUG
 		fprintf(stderr, "[WARNING] bytes lost (%s)\n", "bloom header persist");
 		#endif
@@ -91,23 +100,39 @@ persist(char *backup_file, struct file_info_t *file_info)
 	snprintf(buffer, BUFFER_SIZE, "%s%c%lu.%s",
 			backup_file, BLOOM_CHAR_HASH_INDICATOR,
 			(long unsigned)(time_stamp), BLOOM_EXT_DATABASE);
-	GDBM_FILE gdbmf = gdbm_open(buffer, BUFFER_SIZE,
+	gdbmf = gdbm_open(buffer, BUFFER_SIZE,
 			GDBM_NEWDB, S_IRUSR | S_IWUSR, log_message);
-	/* TODO Dump the hashsets (shash/hash) into bdb files */
+	if (!gdbmf) {
+		#ifndef NDEBUG
+		fprintf(stderr, "[ERROR] %s (open database failed)\n", buffer);
+		#endif
+		return BLOOM_PERSISTENCE_ERROR;
+	}
+	slist_iterate(&file_info->good_files, &slist_iterator);
+	while (slist_iter_has_more(&slist_iterator)) {
+		struct file_entry_t *file_entry = slist_iter_next(&slist_iterator);
+		key.dptr = hash_entry(file_entry, FULL);
+		key.dsize = sizeof(file_entry->hash);
+		value.dptr = (char *)(file_entry);
+		value.dsize = sizeof(struct file_entry_t);
+		status = gdbm_store(gdbmf, key, value, GDBM_INSERT);
+		assert(status == 0);
+	}
 	gdbm_close(gdbmf);
-	/* TODO gzip everything into backup_file */
+	/* TODO gzip everything into backup_file.BLOOM_EXT_CONFIG */
 	return 0;
 }
 
 int
 recover(char *backup_file, struct file_info_t *file_info)
 {
-	int fd;
+	int fd, status;
 	bloom_size_t data_size;
 	unsigned char *data_buffer;
 	if (!backup_file || !file_info) {
 		return BLOOM_PERSISTENCE_ERROR;
 	}
+	status = (int)(sizeof(bloom_size_t));
 	/* Make sure we can read from the file */
 	if ((fd = open(backup_file, O_RDONLY)) < 0) {
 		#ifndef NDEBUG
@@ -116,7 +141,7 @@ recover(char *backup_file, struct file_info_t *file_info)
 		return BLOOM_PERSISTENCE_ERROR;
 	}
 	/* Recover the filter data */
-	if (read(fd, &data_size, sizeof(bloom_size_t)) < sizeof(bloom_size_t)) {
+	if (read(fd, &data_size, status) < status) {
 		#ifndef NDEBUG
 		fprintf(stderr, "[WARNING] bytes lost (%s)\n", "bloom header recover");
 		#endif

@@ -17,8 +17,10 @@ enum hash_depth_t {
 char *
 hash_entry(struct file_entry_t *file_entry, enum hash_depth_t depth)
 {
+	int fd;
+	off_t pivot;
+	char *hash_storage = NULL;
 	unsigned char hash_buffer[MD5_DIGEST_LENGTH], *file_buffer;
-	int fd; off_t pivot; char *hash_storage = NULL;
 	if (!file_entry || (fd = open(file_entry->path, O_RDONLY)) < 0) {
 		#ifndef NDEBUG
 		fprintf(stderr, "[ERROR] '%s' (open failed)\n", file_entry->path);

@@ -175,7 +175,7 @@ main(int argc, char *argv[])
 				trie_insert(file_info.shash_trie, hash_value, file_entry);
 			}
 		}
-		persist("filter.bloom", &file_info);
+		persist("bloom_store", &file_info);
 	}
 
 	/* Step 5: Output results and cleanup before exit */
